@@ -194,10 +194,11 @@ class ComplianceProblem(ElasticityProblem):
             for j in range(numpy.size(xPhys)):
                 KE = self._get_KE(self.CE[j])
                 DKE = self._get_DKE(self.CE_Diff[j])
-
+                if ui[j] @ DKE @ ui[j] < 0:
+                    print('DKE Error')
                 self.obje[j] = ui[j] @ KE @ ui[j] 
-                self.dobj[j] = -1 * ui[j] @ DKE @ ui[j] 
+                self.dobj[j] = numpy.min((-1 * ui[j] @ DKE @ ui[j],0))
                 obj +=   self.obje[j]          
-        self.dobj[j] /= float(self.nloads)
+        self.dobj /= float(self.nloads)
         return obj / float(self.nloads)
 

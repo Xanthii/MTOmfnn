@@ -85,26 +85,25 @@ class TopOptSolver(abc.ABC):
 class OCSolver(TopOptSolver):
 
     def OC(self, x: numpy.ndarray, dobj: numpy.ndarray, dv:numpy.ndarray):
-        minVF = 0.0
+        minVF = 0
         maxVF = 1.
         l1 = 0
         l2 = 1e9
         move = 0.2
         xnew = numpy.zeros_like(x)
-        
-        while (l2 - l1) / (l1 + l2) > 1e-3:
-            lmid = 0.5*(l2 + l1)
+        while (l2 - l1) > 1e-4:
+            lmid = 0.5 * (l2 + l1)     
             xnew[:] = numpy.maximum(minVF, numpy.maximum(x - move, numpy.minimum(maxVF, 
                     numpy.minimum(x + move, x * numpy.sqrt(-dobj /dv/ lmid)))))
 
           ########## problematic
-            self.filter.filter_variables(xnew, xnew)
+            self.filter.filter_variables(xnew, self.xPhys)
           ########## problematic
-            if numpy.sum(xnew) - self.volfrac * self.problem.nelx * self.problem.nely > 0:
+            if numpy.sum(self.xPhys) - self.volfrac * self.problem.nelx * self.problem.nely > 0:
                 l1 = lmid
             else:
                 l2 = lmid
-        
+       
         return xnew
     
 
@@ -112,27 +111,39 @@ class OCSolver(TopOptSolver):
     def optimize(self):
         it = 0
         rel_change = 1.
+        xold = self.xPhys.copy()
         while rel_change > self.ftol_rel and it < self.maxeval:
 
-            obj = self.problem.compute_objective(self.xPhys)
-    
+            obj = self.problem.compute_objective(self.xPhys)    
             
             if isinstance(self.filter, SensitivityBasedFilter):
-                self.filter.filter_objective_sensitivities(self.xPhys, self.problem.dobj)
+                xold = self.xPhys.copy()
+                
+                self.filter.filter_objective_sensitivities(xold, self.problem.dobj)
+                self.OC(xold, self.problem.dobj, self.problem.dv)     
+                rel_change = numpy.max(self.xPhys - xold)
+                vol = numpy.mean(self.xPhys)
+                self.gui.update(self.xPhys)
+
+                it += 1
+                print(f' It.:{it}, Obj.:{obj}, Vol.:{vol} ch.:{rel_change}')
+                
+
+                
             if isinstance(self.filter, DensityBasedFilter):
                 self.filter.filter_objective_sensitivities(self.xPhys, self.problem.dobj)
                 self.filter.filter_volume_sensitivities(self.xPhys, self.problem.dv)
   
-            xnew = self.OC(self.xPhys, self.problem.dobj, self.problem.dv)
-       
-            rel_change = numpy.max(xnew-self.xPhys)
-            vol = numpy.sum(xnew)/(self.problem.nelx * self.problem.nely)
-            
-            print(f' It.:{it}, Obj.:{obj}, Vol.:{vol} ch.:{rel_change}')
-
-            self.gui.update(xnew)
-            self.xPhys[:] = xnew
-            it += 1
+                xnew = self.OC(xold, self.problem.dobj, self.problem.dv)
+           
+                rel_change = numpy.max(xnew - xold)
+                vol = numpy.mean(self.xPhys)
+                   
+    
+                self.gui.update(self.xPhys)
+                xold[:] = xnew
+                it += 1
+                print(f' It.:{it}, Obj.:{obj}, Vol.:{vol} ch.:{rel_change}')
 
         
         
